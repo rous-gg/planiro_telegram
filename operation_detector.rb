@@ -4,9 +4,26 @@ require_relative 'history'
 
 class OperationDetector
   def waiting_for_type_project_name?(user_id)
-    action = HISTORY.prev_action(user_id)
-    return false if !action
+    last_command_replies = HISTORY.last_command_replies(user_id)
 
-    action.type == History::SYSTEM_MESSAGE && action.message == SystemMessages::TYPE_PROJECT_NAME_MESSAGE
+    last_command_replies.has_key?(UserCommands::NEW_PROJECT) && 
+      last_command_replies.size == 1
+  end
+
+  def waiting_for_type_select_flow?(user_id)
+    last_command_replies = HISTORY.last_command_replies(user_id)
+
+    last_command_replies.has_key?(UserCommands::NEW_PROJECT) && 
+      last_command_replies.has_key?(SystemMessages::TYPE_PROJECT_NAME) &&
+      last_command_replies.size == 2
+  end
+
+  def can_create_project?(user_id)
+    last_command_replies = HISTORY.last_command_replies(user_id)
+
+    last_command_replies.has_key?(UserCommands::NEW_PROJECT) &&
+      last_command_replies.has_key?(SystemMessages::TYPE_PROJECT_NAME) &&
+      last_command_replies.has_key?(SystemMessages::SELECT_FLOW) && 
+      last_command_replies.size == 3
   end
 end
