@@ -4,7 +4,7 @@ class History
   attr_reader :history
 
   ACTION_COUNT   = 20
-  USER_MESSAGE   = :user_message
+  USER_REPLY     = :user_reply
   USER_COMMAND   = :user_command
   SYSTEM_MESSAGE = :system_message
 
@@ -15,7 +15,7 @@ class History
 
   def add_user_reply(user_id, message)
     puts "***** User reply: user_id=#{user_id}, message=#{message} *****"
-    @history[user_id] << OpenStruct.new({id: get_id, type: USER_MESSAGE, message: message})
+    @history[user_id] << OpenStruct.new({id: get_id, type: USER_REPLY, message: message})
     clear_history(user_id)
   end
 
@@ -35,8 +35,8 @@ class History
     @history[user_id].select {|command| command.type == SYSTEM_MESSAGE}
   end
 
-  def user_messages(user_id)
-    @history[user_id].select {|command| command.type == USER_MESSAGE}
+  def user_replies(user_id)
+    @history[user_id].select {|command| command.type == USER_REPLY}
   end
 
   def user_commands(user_id)
@@ -60,25 +60,45 @@ class History
     end
 
     result = {}
-
     actions.reverse!
 
     actions.each_with_index do |action, index|
-      break if actions[index + 1].nil?
+      next if action.type == USER_REPLY
+      next_action = actions[index + 1]
+      break if !next_action
 
-      if action.type == USER_COMMAND
-        result[action.command] = OpenStruct.new({
-          message: actions[index + 1].message
-        })
-      elsif action.type == SYSTEM_MESSAGE
-        result[action.message] = OpenStruct.new({
-          message: actions[index + 1].message,
-          extra:   action.extra
-        })
+      if next_action.type == USER_COMMAND || next_action.type == SYSTEM_MESSAGE
+        if action.type == USER_COMMAND
+          result[action.command] = OpenStruct.new({
+            message: nil
+          })
+        else
+          result[action.message] = OpenStruct.new({
+            message: nil,
+            extra:   nil
+          })
+        end
+      else
+        if action.type == USER_COMMAND
+          result[action.command] = OpenStruct.new({
+            message: next_action ? next_action.message : nil
+          })
+        elsif action.type == SYSTEM_MESSAGE
+          result[action.message] = OpenStruct.new({
+            message: actions[index + 1].message,
+            extra:   action.extra
+          })
+        end
       end
     end
 
     result
+  end
+
+  def clear_history(user_id)
+    if @history[user_id].size > ACTION_COUNT
+      @history[user_id].shift
+    end
   end
 
   private
@@ -86,11 +106,5 @@ class History
   def get_id
     @id_seq += 1
     @id_seq
-  end
-
-  def clear_history(user_id)
-    if @history[user_id].size > ACTION_COUNT
-      @history[user_id].shift
-    end
   end
 end

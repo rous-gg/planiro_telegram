@@ -9,16 +9,20 @@ require 'bundler/setup'
 require 'telegram/bot'
 require 'byebug'
 
-require_relative 'operation_detector'
+require_relative 'new_project_operations'
+require_relative 'add_project_member_operations'
 require_relative 'list_project_query_handler'
 require_relative 'list_flows_query_handler'
 require_relative 'list_users_query_handler'
 require_relative 'create_project_handler'
+require_relative 'add_project_member_handler'
 
 HISTORY         = History.new
 
-Telegram::Bot::Client.run(TOKEN, logger: Logger.new($stderr)) do |bot|
-  operation_detector = OperationDetector.new
+# , logger: Logger.new($stderr)
+Telegram::Bot::Client.run(TOKEN) do |bot|
+  new_project_operations        = NewProjectOperations.new
+  add_project_member_operations = AddProjectMemberOperations.new
 
   bot.listen do |message|
     user_id = message.from.id
@@ -40,6 +44,19 @@ Telegram::Bot::Client.run(TOKEN, logger: Logger.new($stderr)) do |bot|
         chat_id: message.chat.id,
         text:    SystemMessages::TYPE_PROJECT_NAME.text
       )
+    when "/#{UserCommands::ADD_PROJECT_MEMBER.name}"
+      HISTORY.add_user_command(user_id, UserCommands::ADD_PROJECT_MEMBER)
+      
+      projects     = ListProjectQueryHandler.new.list_projects(ACCESS_TOKEN)
+      projects_str = projects.map.with_index {|pr, index| "#{index + 1}. #{pr['name']}"}.join("\n")
+      project_ids  = projects.map {|pr| pr['id']}
+
+      HISTORY.add_system_message(user_id, SystemMessages::SELECT_PROJECT, projects)
+
+      bot.api.send_message(
+        chat_id: message.chat.id,
+        text:    SystemMessages::SELECT_PROJECT.text % {projects: projects_str}
+      )
     when "/#{UserCommands::LIST_FLOWS.name}"
       HISTORY.add_user_command(user_id, UserCommands::LIST_FLOWS)
       HISTORY.add_system_message(user_id, SystemMessages::LIST_FLOWS)
@@ -60,7 +77,7 @@ Telegram::Bot::Client.run(TOKEN, logger: Logger.new($stderr)) do |bot|
       projects_str = if projects.size == 0
         SystemMessages::LIST_PROJECTS.empty_text
       else
-        projects_str = projects.map {|pr| pr['name']}.join("\n")
+        projects_str = projects.map.with_index {|pr, index| "#{index + 1}. #{pr['name']}"}.join("\n")
         SystemMessages::LIST_PROJECTS.text % {projects: projects_str}
       end
       
@@ -69,7 +86,8 @@ Telegram::Bot::Client.run(TOKEN, logger: Logger.new($stderr)) do |bot|
         text:    projects_str
       )
     else
-      if operation_detector.waiting_for_type_project_name?(user_id)
+      # CREATE PROJECT OPERATION
+      if new_project_operations.waiting_for_type_project_name?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
         
         flows     = ListFlowsQueryHandler.new.list_flows(ACCESS_TOKEN)
@@ -82,7 +100,7 @@ Telegram::Bot::Client.run(TOKEN, logger: Logger.new($stderr)) do |bot|
           chat_id: message.chat.id,
           text:    SystemMessages::SELECT_FLOW.text % {flows: flows_str}
         )
-      elsif operation_detector.waiting_for_type_select_flow?(user_id)
+      elsif new_project_operations.waiting_for_select_flow?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
         
         users     = ListUsersQueryHandler.new.list_active_organization_users(ACCESS_TOKEN)
@@ -95,7 +113,7 @@ Telegram::Bot::Client.run(TOKEN, logger: Logger.new($stderr)) do |bot|
           chat_id: message.chat.id,
           text:    SystemMessages::SELECT_PROJECT_MANAGER.text % {users: users_str}
         )
-      elsif operation_detector.can_create_project?(user_id)
+      elsif new_project_operations.can_create_project?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
         HISTORY.add_system_message(user_id, SystemMessages::PROJECT_CREATED)
 
@@ -116,6 +134,39 @@ Telegram::Bot::Client.run(TOKEN, logger: Logger.new($stderr)) do |bot|
         bot.api.send_message(
           chat_id: message.chat.id,
           text:    SystemMessages::PROJECT_CREATED.text % {project_name: project.url}
+        )
+      # ADD PROJECT MEMBER OPERATION
+      elsif add_project_member_operations.waiting_for_select_project?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+
+        users     = ListUsersQueryHandler.new.list_active_organization_users(ACCESS_TOKEN)
+        users_str = users.map.with_index {|user, index| "#{index + 1}. #{user['name']}"}.join("\n")
+
+        HISTORY.add_system_message(user_id, SystemMessages::SELECT_USER, users)
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::SELECT_USER.text % {users: users_str}
+        )
+      elsif add_project_member_operations.waiting_for_select_user?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+        
+        last_command_replies = HISTORY.last_command_replies(user_id)
+        project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
+        project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
+        user_number          = last_command_replies[SystemMessages::SELECT_USER].message.to_i
+        user                 = last_command_replies[SystemMessages::SELECT_USER].extra[user_number - 1]
+        
+        HISTORY.add_system_message(user_id, SystemMessages::PROJECT_MEMBER_ADDED)
+        
+        AddProjectMemberHandler.new(ACCESS_TOKEN).create(
+          user_id:    user['id'],
+          project_id: project['id']
+        )
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::PROJECT_MEMBER_ADDED.text % {user: user['name'], project: project['name']}
         )
       else
         bot.api.send_message(

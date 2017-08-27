@@ -23,6 +23,16 @@ module SystemMessages
   )
 
   register_message(
+    name: :select_project,
+    text: "Type project number:\n%{projects}"
+  )
+
+  register_message(
+    name: :select_user,
+    text: "Type user number:\n%{users}"
+  )
+
+  register_message(
     name: :select_flow,
     text: "Type flow number:\n%{flows}"
   )
@@ -46,6 +56,11 @@ module SystemMessages
   register_message(
     name:       :project_created,
     text:       "Project \"%{project_name}\ was created"
+  )
+
+  register_message(
+    name:       :project_member_added,
+    text:       "User %{user} was added to %{project}"
   )
 
   register_message(

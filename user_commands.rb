@@ -31,6 +31,11 @@ module UserCommands
     text: "Lists all organization stage flows."
   )
 
+  register_command(
+    name: :add_project_member,
+    text: "Adds active organization user to project."
+  )
+
   class << self
     def get(name)
       ALL.detect {|c| c.name == name}

@@ -40,6 +40,49 @@ class PlaniroAPI
     )
   end
 
+  def update_project(id:, name:, owner_id:, flow_id:, points:, points_visible:)
+    RestClient.post(
+      "#{SITE_URL}/commands.json",
+      {
+        access_token:    @access_token,
+        commands: [
+          '' => {
+            guid: 'GUID',
+            name: 'pm.projects.update_project',
+            params: {
+              id:              id,
+              name:            name,
+              owner_id:        owner_id,
+              points:          points,
+              points_visible:  points_visible,
+              calendar_color:  0,
+              flow_id:         flow_id
+            }
+          }
+        ]
+      }
+    )
+  end
+
+  def add_project_member(user_id:, project_id:)
+    RestClient.post(
+      "#{SITE_URL}/commands.json",
+      {
+        access_token:    @access_token,
+        commands: [
+          '' => {
+            guid: 'GUID',
+            name: 'pm.project_members.add_user_to_project',
+            params: {
+              project_id: project_id,
+              user_id:    user_id
+            }
+          }
+        ]
+      }
+    )
+  end
+
   private
   
   def get_by_path(path, params = {})
