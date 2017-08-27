@@ -1,7 +1,7 @@
 require 'rest-client'
 require 'oj'
 
-# RestClient.log = Logger.new($stderr)
+RestClient.log = Logger.new($stderr)
 
 class PlaniroAPI
   SITE_URL = "https://app.planiro.com"
@@ -16,6 +16,10 @@ class PlaniroAPI
 
   def list_organization_flows(organization_id)
     get_by_path("/organization/stage_flow/flows/list.json", organization_id: organization_id)['data']
+  end
+
+  def list_project_tasks(project_id)
+    get_by_path("/pm/tasks/get_uncompleted_tasks.json", project_id: project_id)['data']
   end
 
   def create_project(organization_id:, name:, owner_id:, flow_id:)
@@ -95,6 +99,25 @@ class PlaniroAPI
             params: {
               project_id: project_id,
               title:      title
+            }
+          }
+        ]
+      }
+    )
+  end
+
+  def change_task_points(task_id:, points:)
+    RestClient.post(
+      "#{SITE_URL}/commands.json",
+      {
+        access_token:    @access_token,
+        commands: [
+          '' => {
+            guid: 'GUID',
+            name: 'pm.tasks.change_points',
+            params: {
+              id:     task_id,
+              points: points
             }
           }
         ]

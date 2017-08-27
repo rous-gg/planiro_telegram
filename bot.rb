@@ -12,11 +12,15 @@ require 'byebug'
 require_relative 'new_project_operations'
 require_relative 'add_project_member_operations'
 require_relative 'task_operations'
+require_relative 'set_task_award_operations'
 require_relative 'list_project_query_handler'
 require_relative 'list_flows_query_handler'
 require_relative 'list_users_query_handler'
+require_relative 'list_project_tasks_query_handler'
 require_relative 'create_project_handler'
 require_relative 'add_project_member_handler'
+require_relative 'set_task_award_handler'
+require_relative 'set_task_award_handler'
 require_relative 'create_task_handler'
 
 HISTORY         = History.new
@@ -26,6 +30,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
   new_project_operations        = NewProjectOperations.new
   add_project_member_operations = AddProjectMemberOperations.new
   task_operations               = TaskOperations.new
+  set_task_award_operations     = SetTaskAwardOperations.new
 
   bot.listen do |message|
     user_id = message.from.id
@@ -60,7 +65,18 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
       
       projects     = ListProjectQueryHandler.new.list_projects(ACCESS_TOKEN)
       projects_str = projects.map.with_index {|pr, index| "#{index + 1}. #{pr['name']}"}.join("\n")
-      project_ids  = projects.map {|pr| pr['id']}
+
+      HISTORY.add_system_message(user_id, SystemMessages::SELECT_PROJECT, projects)
+
+      bot.api.send_message(
+        chat_id: message.chat.id,
+        text:    SystemMessages::SELECT_PROJECT.text % {projects: projects_str}
+      )
+    when "/#{UserCommands::SET_TASK_AWARD.name}"
+      HISTORY.add_user_command(user_id, UserCommands::SET_TASK_AWARD)
+      
+      projects     = ListProjectQueryHandler.new.list_projects(ACCESS_TOKEN)
+      projects_str = projects.map.with_index {|pr, index| "#{index + 1}. #{pr['name']}"}.join("\n")
 
       HISTORY.add_system_message(user_id, SystemMessages::SELECT_PROJECT, projects)
 
@@ -210,6 +226,45 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         bot.api.send_message(
           chat_id: message.chat.id,
           text:    SystemMessages::PROJECT_MEMBER_ADDED.text % {user: user['name'], project: project['name']}
+        )
+      # SET TASK AWARD OPERATION
+      elsif set_task_award_operations.waiting_for_select_project?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+
+        last_command_replies = HISTORY.last_command_replies(user_id)
+        project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
+        project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
+        tasks                = ListProjectTasksQueryHandler.new(ACCESS_TOKEN).list_project_tasks(project['id'])
+        tasks_str            = tasks.map.with_index {|task, index| "#{index + 1}. #{task['title']}"}.join("\n")
+
+        HISTORY.add_system_message(user_id, SystemMessages::SELECT_TASK, tasks)
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::SELECT_TASK.text % {tasks: tasks_str}
+        )
+      elsif set_task_award_operations.waiting_for_select_task?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+        HISTORY.add_system_message(user_id, SystemMessages::ENTER_AWARD)
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::ENTER_AWARD.text
+        )
+      elsif set_task_award_operations.can_set_award?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+
+        last_command_replies = HISTORY.last_command_replies(user_id)
+        task_number          = last_command_replies[SystemMessages::SELECT_TASK].message.to_i
+        task                 = last_command_replies[SystemMessages::SELECT_TASK].extra[task_number - 1]
+        award                = last_command_replies[SystemMessages::ENTER_AWARD].message.to_s.to_i
+
+        SetTaskAwardHandler.new(ACCESS_TOKEN).set_award(task_id: task['id'], award: award)
+        HISTORY.add_system_message(user_id, SystemMessages::TASK_AWARD_SET, tasks)
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::TASK_AWARD_SET.text % {amount: award}
         )
       else
         bot.api.send_message(

@@ -41,6 +41,11 @@ module UserCommands
     text: "Creates new project task"
   )
 
+  register_command(
+    name: :set_task_award,
+    text: "Sets task award"
+  )
+
   class << self
     def get(name)
       ALL.detect {|c| c.name == name}

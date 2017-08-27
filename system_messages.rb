@@ -33,6 +33,21 @@ module SystemMessages
   )
 
   register_message(
+    name: :select_task,
+    text: "Select task number:\n%{tasks}"
+  )
+
+  register_message(
+    name: :task_award_set,
+    text: "Task award was set to %{amount}"
+  )
+
+  register_message(
+    name: :enter_award,
+    text: "Enter award amount (1-10):"
+  )
+
+  register_message(
     name: :select_project,
     text: "Type project number:\n%{projects}"
   )
