@@ -83,6 +83,25 @@ class PlaniroAPI
     )
   end
 
+  def create_task(title:, project_id:)
+    RestClient.post(
+      "#{SITE_URL}/commands.json",
+      {
+        access_token:    @access_token,
+        commands: [
+          '' => {
+            guid: 'GUID',
+            name: 'pm.tasks.create_task',
+            params: {
+              project_id: project_id,
+              title:      title
+            }
+          }
+        ]
+      }
+    )
+  end
+
   private
   
   def get_by_path(path, params = {})

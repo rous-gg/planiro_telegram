@@ -36,6 +36,11 @@ module UserCommands
     text: "Adds active organization user to project."
   )
 
+  register_command(
+    name: :new_task,
+    text: "Creates new project task"
+  )
+
   class << self
     def get(name)
       ALL.detect {|c| c.name == name}

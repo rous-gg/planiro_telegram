@@ -15,11 +15,6 @@ contract OrganizationRegistry {
     projectBalancesRegistry[projectId] = 0;
   }
 
-  function setBalance(uint8 projectId, uint256 balance) public {
-    require(projectBalancesRegistry[projectId] == 0);
-    projectBalancesRegistry[projectId] = balance;
-  }
-
   function addMemberToProject(uint8 projectId, uint8 userId) returns(bool) {
     for(uint i = 0;i < projectMembersRegistry[userId].length; i++) {
       if (projectMembersRegistry[userId][i] == projectId) {

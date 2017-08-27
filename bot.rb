@@ -11,11 +11,13 @@ require 'byebug'
 
 require_relative 'new_project_operations'
 require_relative 'add_project_member_operations'
+require_relative 'task_operations'
 require_relative 'list_project_query_handler'
 require_relative 'list_flows_query_handler'
 require_relative 'list_users_query_handler'
 require_relative 'create_project_handler'
 require_relative 'add_project_member_handler'
+require_relative 'create_task_handler'
 
 HISTORY         = History.new
 
@@ -23,6 +25,7 @@ HISTORY         = History.new
 Telegram::Bot::Client.run(TOKEN) do |bot|
   new_project_operations        = NewProjectOperations.new
   add_project_member_operations = AddProjectMemberOperations.new
+  task_operations               = TaskOperations.new
 
   bot.listen do |message|
     user_id = message.from.id
@@ -43,6 +46,14 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
       bot.api.send_message(
         chat_id: message.chat.id,
         text:    SystemMessages::TYPE_PROJECT_NAME.text
+      )
+    when "/#{UserCommands::NEW_TASK.name}"
+      HISTORY.add_user_command(user_id, UserCommands::NEW_TASK)
+      HISTORY.add_system_message(user_id, SystemMessages::TYPE_TASK_TITLE)
+      
+      bot.api.send_message(
+        chat_id: message.chat.id,
+        text:    SystemMessages::TYPE_TASK_TITLE.text
       )
     when "/#{UserCommands::ADD_PROJECT_MEMBER.name}"
       HISTORY.add_user_command(user_id, UserCommands::ADD_PROJECT_MEMBER)
@@ -134,6 +145,38 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         bot.api.send_message(
           chat_id: message.chat.id,
           text:    SystemMessages::PROJECT_CREATED.text % {project_name: project.url}
+        )
+      # CREATE TASK OPERATION
+      elsif task_operations.waiting_for_type_task_tite?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+
+        projects     = ListProjectQueryHandler.new.list_projects(ACCESS_TOKEN)
+        projects_str = projects.map.with_index {|pr, index| "#{index + 1}. #{pr['name']}"}.join("\n")
+
+        HISTORY.add_system_message(user_id, SystemMessages::SELECT_PROJECT, projects)
+  
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::SELECT_PROJECT.text % {projects: projects_str}
+        )
+      elsif task_operations.can_create_task?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+        
+        last_command_replies = HISTORY.last_command_replies(user_id)
+        task_title           = last_command_replies[SystemMessages::TYPE_TASK_TITLE].message
+        project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
+        project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
+
+        HISTORY.add_system_message(user_id, SystemMessages::PROJECT_CREATED)
+
+        CreateTaskHandler.new(ACCESS_TOKEN).create(
+          title:      task_title,
+          project_id: project['id']
+        )
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::TASK_CREATED.text % {project: project['name']}
         )
       # ADD PROJECT MEMBER OPERATION
       elsif add_project_member_operations.waiting_for_select_project?(user_id)

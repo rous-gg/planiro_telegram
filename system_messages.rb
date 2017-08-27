@@ -23,6 +23,16 @@ module SystemMessages
   )
 
   register_message(
+    name: :type_task_title,
+    text: "Type task title:"
+  )
+
+  register_message(
+    name:       :task_created,
+    text:       "Task was added to %{project}"
+  )
+
+  register_message(
     name: :select_project,
     text: "Type project number:\n%{projects}"
   )
