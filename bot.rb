@@ -39,6 +39,15 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
   accept_task_operations        = AcceptTaskOperations.new
   user_awards_operations        = UserAwardsOperations.new
 
+  invalid_proc = Proc.new do |user_id, bot, chat_id|
+    bot.api.send_message(
+      chat_id: chat_id,
+      text:    SystemMessages::INVALID_INPUT.text
+    )
+
+    HISTORY.clear_history(user_id)
+  end
+
   bot.listen do |message|
     user_id = message.from.id
 
@@ -194,17 +203,21 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         owner_number         = last_command_replies[SystemMessages::SELECT_PROJECT_MANAGER].message.to_i
         owner_id             = last_command_replies[SystemMessages::SELECT_PROJECT_MANAGER].extra[owner_number - 1]
 
-        project = CreateProjectHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
-          name:            project_name,
-          organization_id: OrganizationQueryHandler.new.get_organization_id(ACCESS_TOKEN),
-          flow_id:         flow_id,
-          owner_id:        owner_id
-        )
+        if flow_id && owner_id
+          project = CreateProjectHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
+            name:            project_name,
+            organization_id: OrganizationQueryHandler.new.get_organization_id(ACCESS_TOKEN),
+            flow_id:         flow_id,
+            owner_id:        owner_id
+          )
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::PROJECT_CREATED.text % {project_name: project.url}
-        )
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::PROJECT_CREATED.text % {project_name: project.url}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       # CREATE TASK OPERATION
       elsif task_operations.waiting_for_type_task_tite?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
@@ -226,17 +239,21 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
         project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
 
-        HISTORY.add_system_message(user_id, SystemMessages::PROJECT_CREATED)
+        if project
+          HISTORY.add_system_message(user_id, SystemMessages::PROJECT_CREATED)
 
-        CreateTaskHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
-          title:      task_title,
-          project_id: project['id']
-        )
+          CreateTaskHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
+            title:      task_title,
+            project_id: project['id']
+          )
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::TASK_CREATED.text % {project: project['name']}
-        )
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::TASK_CREATED.text % {project: project['name']}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       # ADD PROJECT MEMBER OPERATION
       elsif add_project_member_operations.waiting_for_select_project?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
@@ -259,17 +276,21 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         user_number          = last_command_replies[SystemMessages::SELECT_USER].message.to_i
         user                 = last_command_replies[SystemMessages::SELECT_USER].extra[user_number - 1]
         
-        HISTORY.add_system_message(user_id, SystemMessages::PROJECT_MEMBER_ADDED)
-        
-        AddProjectMemberHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
-          user_id:    user['id'],
-          project_id: project['id']
-        )
+        if project && user
+          HISTORY.add_system_message(user_id, SystemMessages::PROJECT_MEMBER_ADDED)
+          
+          AddProjectMemberHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
+            user_id:    user['id'],
+            project_id: project['id']
+          )
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::PROJECT_MEMBER_ADDED.text % {user: user['name'], project: project['name']}
-        )
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::PROJECT_MEMBER_ADDED.text % {user: user['name'], project: project['name']}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       # SET TASK AWARD OPERATION
       elsif set_task_award_operations.waiting_for_select_project?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
@@ -277,15 +298,20 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         last_command_replies = HISTORY.last_command_replies(user_id)
         project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
         project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
-        tasks                = ListProjectTasksQueryHandler.new(ACCESS_TOKEN).list_project_tasks(project['id'])
-        tasks_str            = tasks.map.with_index {|task, index| "#{index + 1}. #{task['title']}"}.join("\n")
 
-        HISTORY.add_system_message(user_id, SystemMessages::SELECT_TASK, tasks)
+        if project
+          tasks                = ListProjectTasksQueryHandler.new(ACCESS_TOKEN).list_project_tasks(project['id'])
+          tasks_str            = tasks.map.with_index {|task, index| "#{index + 1}. #{task['title']}"}.join("\n")
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::SELECT_TASK.text % {tasks: tasks_str}
-        )
+          HISTORY.add_system_message(user_id, SystemMessages::SELECT_TASK, tasks)
+
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::SELECT_TASK.text % {tasks: tasks_str}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       elsif set_task_award_operations.waiting_for_select_task?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
         HISTORY.add_system_message(user_id, SystemMessages::ENTER_AWARD)
@@ -302,13 +328,17 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         task                 = last_command_replies[SystemMessages::SELECT_TASK].extra[task_number - 1]
         award                = last_command_replies[SystemMessages::ENTER_AWARD].message.to_s.to_i
 
-        SetTaskAwardHandler.new(ACCESS_TOKEN, ORG_CONTRACT).set_award(task_id: task['id'], award: award)
-        HISTORY.add_system_message(user_id, SystemMessages::TASK_AWARD_SET, tasks)
+        if task
+          SetTaskAwardHandler.new(ACCESS_TOKEN, ORG_CONTRACT).set_award(task_id: task['id'], award: award)
+          HISTORY.add_system_message(user_id, SystemMessages::TASK_AWARD_SET, tasks)
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::TASK_AWARD_SET.text % {amount: award}
-        )
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::TASK_AWARD_SET.text % {amount: award}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       # ASSIGN USER TO TASK
       elsif assign_user_operations.waiting_for_select_project?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
@@ -316,30 +346,40 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         last_command_replies = HISTORY.last_command_replies(user_id)
         project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
         project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
-        tasks                = ListProjectTasksQueryHandler.new(ACCESS_TOKEN).list_project_tasks(project['id'])
-        tasks_str            = tasks.map.with_index {|task, index| "#{index + 1}. #{task['title']}"}.join("\n")
+        
+        if project
+          tasks                = ListProjectTasksQueryHandler.new(ACCESS_TOKEN).list_project_tasks(project['id'])
+          tasks_str            = tasks.map.with_index {|task, index| "#{index + 1}. #{task['title']}"}.join("\n")
 
-        HISTORY.add_system_message(user_id, SystemMessages::SELECT_TASK, tasks)
+          HISTORY.add_system_message(user_id, SystemMessages::SELECT_TASK, tasks)
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::SELECT_TASK.text % {tasks: tasks_str}
-        )
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::SELECT_TASK.text % {tasks: tasks_str}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       elsif assign_user_operations.waiting_for_select_task?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
 
         last_command_replies = HISTORY.last_command_replies(user_id)
         project_number = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
         project        = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
-        users          = ListUsersQueryHandler.new.list_active_project_users(ACCESS_TOKEN, project['id'])
-        users_str      = users.map.with_index {|user, index| "#{index + 1}. #{user['name']}"}.join("\n")
 
-        HISTORY.add_system_message(user_id, SystemMessages::SELECT_USER, users)
+        if project
+          users          = ListUsersQueryHandler.new.list_active_project_users(ACCESS_TOKEN, project['id'])
+          users_str      = users.map.with_index {|user, index| "#{index + 1}. #{user['name']}"}.join("\n")
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::SELECT_USER.text % {users: users_str}
-        )
+          HISTORY.add_system_message(user_id, SystemMessages::SELECT_USER, users)
+
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::SELECT_USER.text % {users: users_str}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       elsif assign_user_operations.can_assign_user?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
 
@@ -349,13 +389,17 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         user_number          = last_command_replies[SystemMessages::SELECT_USER].message.to_s.to_i
         user                 = last_command_replies[SystemMessages::SELECT_USER].extra[user_number - 1]
 
-        AssignTaskUserHandler.new(ACCESS_TOKEN, ORG_CONTRACT).assign_user(task_id: task['id'], user_id: user['id'])
-        HISTORY.add_system_message(user_id, SystemMessages::USER_ASSIGNED)
+        if task && user
+          AssignTaskUserHandler.new(ACCESS_TOKEN, ORG_CONTRACT).assign_user(task_id: task['id'], user_id: user['id'])
+          HISTORY.add_system_message(user_id, SystemMessages::USER_ASSIGNED)
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::USER_ASSIGNED.text % {user: user['name'], task: task['title']}
-        )
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::USER_ASSIGNED.text % {user: user['name'], task: task['title']}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       # ACCEPT TASK OPERATION
       elsif accept_task_operations.waiting_for_select_project?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
@@ -363,15 +407,20 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         last_command_replies = HISTORY.last_command_replies(user_id)
         project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
         project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
-        tasks                = ListProjectTasksQueryHandler.new(ACCESS_TOKEN).list_project_tasks(project['id'])
-        tasks_str            = tasks.map.with_index {|task, index| "#{index + 1}. #{task['title']}"}.join("\n")
 
-        HISTORY.add_system_message(user_id, SystemMessages::SELECT_TASK, tasks)
+        if project
+          tasks                = ListProjectTasksQueryHandler.new(ACCESS_TOKEN).list_project_tasks(project['id'])
+          tasks_str            = tasks.map.with_index {|task, index| "#{index + 1}. #{task['title']}"}.join("\n")
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::SELECT_TASK.text % {tasks: tasks_str}
-        )
+          HISTORY.add_system_message(user_id, SystemMessages::SELECT_TASK, tasks)
+
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::SELECT_TASK.text % {tasks: tasks_str}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       elsif accept_task_operations.can_accept_task?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
 
@@ -381,29 +430,33 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         task_number          = last_command_replies[SystemMessages::SELECT_TASK].message.to_i
         task                 = last_command_replies[SystemMessages::SELECT_TASK].extra[task_number - 1]
         
-        stage = task['info_for_stages'].detect {|ifs| ifs['user_ids'].size > 0}
+        if project && task
+          stage = task['info_for_stages'].detect {|ifs| ifs['user_ids'].size > 0}
 
-        user = if stage
-          user_id = stage['user_ids'].first
-          users = ListUsersQueryHandler.new.list_active_project_users(ACCESS_TOKEN, project['id'])
-          users.detect {|u| u['id'] == user_id}
-        end
+          user = if stage
+            user_id = stage['user_ids'].first
+            users = ListUsersQueryHandler.new.list_active_project_users(ACCESS_TOKEN, project['id'])
+            users.detect {|u| u['id'] == user_id}
+          end
 
-        points = task['points']
+          points = task['points']
 
-        AcceptTaskHandler.new(ACCESS_TOKEN, ORG_CONTRACT).accept_task(task_id: task['id'], project_id: project['id'])
-        HISTORY.add_system_message(user_id, SystemMessages::TASK_ACCEPTED, tasks)
+          AcceptTaskHandler.new(ACCESS_TOKEN, ORG_CONTRACT).accept_task(task_id: task['id'], project_id: project['id'])
+          HISTORY.add_system_message(user_id, SystemMessages::TASK_ACCEPTED, tasks)
 
-        if user && points
-          bot.api.send_message(
-            chat_id: message.chat.id,
-            text:    SystemMessages::TASK_ACCEPTED.text % {user: user['name'], task: task['title'], amount: points}
-          )
+          if user && points
+            bot.api.send_message(
+              chat_id: message.chat.id,
+              text:    SystemMessages::TASK_ACCEPTED.text % {user: user['name'], task: task['title'], amount: points}
+            )
+          else
+            bot.api.send_message(
+              chat_id: message.chat.id,
+              text:    SystemMessages::TASK_ACCEPTED.empty_text % {task: task['title']}
+            )
+          end
         else
-          bot.api.send_message(
-            chat_id: message.chat.id,
-            text:    SystemMessages::TASK_ACCEPTED.empty_text % {task: task['title']}
-          )
+          invalid_proc.call(user_id, bot, message.chat.id)
         end
       # USER AWARDS OPERATION
       elsif user_awards_operations.can_return_awards?(user_id)
@@ -413,13 +466,17 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         user_number          = last_command_replies[SystemMessages::SELECT_USER].message.to_s.to_i
         user                 = last_command_replies[SystemMessages::SELECT_USER].extra[user_number - 1]
 
-        amount = ORG_CONTRACT.call.get_user_balance(user['id'])
-        HISTORY.add_system_message(user_id, SystemMessages::TOTAL_USER_AWARDS)
+        if user
+          amount = ORG_CONTRACT.call.get_user_balance(user['id'])
+          HISTORY.add_system_message(user_id, SystemMessages::TOTAL_USER_AWARDS)
 
-        bot.api.send_message(
-          chat_id: message.chat.id,
-          text:    SystemMessages::TOTAL_USER_AWARDS.text % {user: user['name'], amount: amount.to_s.to_i}
-        )
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::TOTAL_USER_AWARDS.text % {user: user['name'], amount: amount.to_s.to_i}
+          )
+        else
+          invalid_proc.call(user_id, bot, message.chat.id)
+        end
       else
         bot.api.send_message(
           chat_id: message.chat.id,

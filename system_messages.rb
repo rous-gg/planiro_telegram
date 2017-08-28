@@ -109,6 +109,11 @@ module SystemMessages
     text:       "Unknown input. Type command first or use /help to get list of available commands"
   )
 
+  register_message(
+    name:       :invalid_input,
+    text:       "Invalid input."
+  )
+
   class << self
     def get(name)
       ALL.detect {|c| c.name == name}
