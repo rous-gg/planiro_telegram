@@ -369,7 +369,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
             users_auth.each do |u_id, u_data|
               if u_data['planiro_id'] == user['id']
 
-                actor = ListUsersQueryHandler.new.user_by_id(access_token, user_id)
+                actor = ListUsersQueryHandler.new.user_by_id(access_token, u_data['planiro_id'])
 
                 bot.api.send_message(
                   chat_id: u_data['chat_id'],
