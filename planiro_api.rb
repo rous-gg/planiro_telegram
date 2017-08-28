@@ -14,6 +14,10 @@ class PlaniroAPI
     get_by_path("/account/get_account_data.json")
   end
 
+  def get_project(project_id)
+    get_by_path("/pm/projects/get_project.json", {id: project_id})
+  end
+
   def list_organization_flows(organization_id)
     get_by_path("/organization/stage_flow/flows/list.json", organization_id: organization_id)['data']
   end

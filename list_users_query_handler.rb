@@ -22,4 +22,19 @@ class ListUsersQueryHandler
 
     users
   end
+
+  def list_active_project_users(access_token, project_id)
+    api = PlaniroAPI.new(access_token)
+    data = api.get_account_data
+    
+    project_user_ids = api.get_project(project_id)['user_ids']
+
+    users = data['users'].select {|user| project_user_ids.include?(user['id'])}
+
+    users.each do |user|
+      user['name'] = user['localized_names']['ru'] || user['localized_names']['en']
+    end
+
+    users
+  end
 end

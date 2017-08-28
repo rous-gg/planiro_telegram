@@ -2,8 +2,6 @@ TOKEN           = "447379304:AAFAlQ-_1ZqFy-uuKXD9SCXDsOl2ZL50CFw"
 USERNAME        = "TheATeamBot"
 BOT_NAME        = "gk-invent-hackathon"
 ACCESS_TOKEN    = "kxnA72NyKVUZZzmLGUM1"
-ORGANIZATION_ID = 2934
-ADMIN_ID        = 4284
 
 require 'bundler/setup'
 require 'telegram/bot'
@@ -330,8 +328,11 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
       elsif assign_user_operations.waiting_for_select_task?(user_id)
         HISTORY.add_user_reply(user_id, message.text)
 
-        users     = ListUsersQueryHandler.new.list_active_organization_users(ACCESS_TOKEN)
-        users_str = users.map.with_index {|user, index| "#{index + 1}. #{user['name']}"}.join("\n")
+        last_command_replies = HISTORY.last_command_replies(user_id)
+        project_number = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
+        project        = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
+        users          = ListUsersQueryHandler.new.list_active_project_users(ACCESS_TOKEN, project['id'])
+        users_str      = users.map.with_index {|user, index| "#{index + 1}. #{user['name']}"}.join("\n")
 
         HISTORY.add_system_message(user_id, SystemMessages::SELECT_USER, users)
 
@@ -384,7 +385,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
 
         user = if stage
           user_id = stage['user_ids'].first
-          users = ListUsersQueryHandler.new.list_active_organization_users(ACCESS_TOKEN)
+          users = ListUsersQueryHandler.new.list_active_project_users(ACCESS_TOKEN, project['id'])
           users.detect {|u| u['id'] == user_id}
         end
 

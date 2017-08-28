@@ -35,8 +35,3 @@ ETH_CLIENT = Ethereum::HttpClient.new('http://localhost:8545')
 ORG_CONTRACT = Ethereum::Contract.create(client: ETH_CLIENT, file: 'organization.sol')
 # contract.key = Eth::Key.new(priv: PRIVATE_WALLET_KEY)
 ORG_CONTRACT.deploy_and_wait
-# puts contract.transact.new_project(1)
-# puts address
-# require 'byebug'
-# debugger
-# puts 'sss'
