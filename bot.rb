@@ -40,10 +40,10 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
   accept_task_operations        = AcceptTaskOperations.new
   user_awards_operations        = UserAwardsOperations.new
   join_operations               = JoinOperations.new
-  access_tokens_file_path       = File.join(__dir__, 'access_tokens.json')
+  users_auth_file_path          = File.join(__dir__, 'users_auth.json')
 
-  access_tokens = if File.exists?(access_tokens_file_path)
-    Oj.load(File.read(access_tokens_file_path))
+  users_auth = if File.exists?(users_auth_file_path)
+    Oj.load(File.read(users_auth_file_path))
   else
     {}
   end
@@ -59,9 +59,13 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
 
   bot.listen do |message|
     user_id      = message.from.id
-    access_token = access_tokens[user_id]
+    user_auth    = users_auth[user_id]
 
-    if !access_token
+    if user_auth
+      access_token = user_auth['token']
+    end
+
+    if !user_auth
       case message.text
       when "/#{UserCommands::JOIN.name}"
         HISTORY.add_user_command(user_id, UserCommands::JOIN)
@@ -95,8 +99,16 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
               text:    SystemMessages::INVALID_EMAIL_OR_PASSWORD.text
             )
           else
-            access_tokens[user_id] = token
-            File.write(access_tokens_file_path, Oj.dump(access_tokens))
+            access_token = token
+            account_id = AccountQueryHandler.new.my_account_id(access_token)
+
+            users_auth[user_id] = {
+              'token'      => token,
+              'planiro_id' => account_id,
+              'chat_id'    => message.chat.id
+            }
+
+            File.write(users_auth_file_path, Oj.dump(users_auth))
 
             bot.api.send_message(
               chat_id: message.chat.id,
@@ -112,6 +124,16 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
       end
     else
       case message.text
+      when "/#{UserCommands::LOGOUT.name}"
+        HISTORY.add_user_command(user_id, UserCommands::LOGOUT)
+
+        users_auth.delete(user_id)
+        File.write(users_auth_file_path, Oj.dump(users_auth))
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::LOGGED_OUT.text
+        )
       when "/#{UserCommands::HELP.name}"
         HISTORY.add_user_command(user_id, UserCommands::HELP)
         HISTORY.add_system_message(user_id, SystemMessages::HELP)
@@ -344,6 +366,20 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
               project_id: project['id']
             )
 
+            users_auth.each do |u_id, u_data|
+              if u_data['planiro_id'] == user['id']
+
+                actor = ListUsersQueryHandler.new.user_by_id(access_token, user_id)
+
+                bot.api.send_message(
+                  chat_id: u_data['chat_id'],
+                  text:    SystemMessages::ADDED_TO_PROJECT.text % {actor: actor['name'], project: project['name']}
+                )
+
+                break
+              end
+            end
+            
             bot.api.send_message(
               chat_id: message.chat.id,
               text:    SystemMessages::PROJECT_MEMBER_ADDED.text % {user: user['name'], project: project['name']}

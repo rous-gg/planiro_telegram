@@ -37,4 +37,12 @@ class ListUsersQueryHandler
 
     users
   end
+
+  def user_by_id(access_token, user_id)
+    api = PlaniroAPI.new(access_token)
+    data = api.get_account_data
+    user = data['users'].detect {|user| user_id == user['id']}
+    user['name'] = user['localized_names']['ru'] || user['localized_names']['en']
+    user
+  end
 end

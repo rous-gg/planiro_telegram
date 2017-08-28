@@ -1,7 +1,7 @@
 require 'rest-client'
 require 'oj'
 
-RestClient.log = Logger.new($stderr)
+# RestClient.log = Logger.new($stderr)
 
 class PlaniroAPI
   SITE_URL = "https://app.planiro.com"

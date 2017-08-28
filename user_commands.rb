@@ -17,6 +17,11 @@ module UserCommands
   )
 
   register_command(
+    name: :logout,
+    text: "Logout from channel"
+  )
+
+  register_command(
     name: :help,
     text: "Returns information about all available commands"
   )

@@ -18,6 +18,11 @@ module SystemMessages
   )
 
   register_message(
+    name: :logged_out,
+    text: "You have successfully logged out from the channel. Use /join to login again "
+  )
+
+  register_message(
     name: :type_project_name,
     text: "Type project name:"
   )
@@ -117,6 +122,11 @@ module SystemMessages
   register_message(
     name:       :project_member_added,
     text:       "User %{user} was added to %{project}"
+  )
+
+  register_message(
+    name:       :added_to_project,
+    text:       "User %{actor} added you to %{project}"
   )
 
   register_message(
