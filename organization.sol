@@ -5,7 +5,7 @@ contract OrganizationRegistry {
   mapping (uint8 => uint8)   public projectOwnersRegistry;
   mapping (uint8 => uint8)   public projectTasksRegistry;
   mapping (uint8 => uint8[]) public projectMembersRegistry;
-  mapping (uint8 => uint8[]) public taskAssigneesRegistry;
+  mapping (uint8 => uint8)   public taskAssigneesRegistry;
   mapping (uint8 => uint256) public taskAwardsRegistry;
   mapping (uint8 => uint256) public userBalancesRegistry;
 
@@ -46,15 +46,10 @@ contract OrganizationRegistry {
     taskAwardsRegistry[taskId] = amount;
   }
 
-  function acceptTask(uint8 taskId) {
-    userId = taskAssigneesRegistry[taskI];
-
-    if (userId) {
-      balance = taskAwardsRegistry[taskId];
-      if (balance) {
-        amount = taskAwardsRegistry[taskId];
-        userBalancesRegistry[userId] += taskAwardsRegistry[taskId];
-        Transfer(taskId, userId, amount)
+  function acceptTask(uint8 taskId) public {
+    if (taskAssigneesRegistry[taskId] != 0) {
+      if (taskAwardsRegistry[taskId] != 0) {
+        userBalancesRegistry[taskAssigneesRegistry[taskId]] += taskAwardsRegistry[taskId];
       }
     }
   }

@@ -15,6 +15,7 @@ require_relative 'task_operations'
 require_relative 'assign_user_operations'
 require_relative 'set_task_award_operations'
 require_relative 'accept_task_operations'
+require_relative 'user_awards_operations'
 require_relative 'list_project_query_handler'
 require_relative 'list_flows_query_handler'
 require_relative 'list_users_query_handler'
@@ -26,6 +27,7 @@ require_relative 'set_task_award_handler'
 require_relative 'create_task_handler'
 require_relative 'accept_task_handler'
 require_relative 'assign_task_user_handler'
+require_relative 'ethereum'
 
 HISTORY         = History.new
 
@@ -37,6 +39,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
   set_task_award_operations     = SetTaskAwardOperations.new
   assign_user_operations        = AssignUserOperations.new
   accept_task_operations        = AcceptTaskOperations.new
+  user_awards_operations        = UserAwardsOperations.new
 
   bot.listen do |message|
     user_id = message.from.id
@@ -125,6 +128,18 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         chat_id: message.chat.id,
         text:    SystemMessages::LIST_FLOWS.text % {flows: flows_str}
       )
+    when "/#{UserCommands::USER_AWARDS.name}"
+      HISTORY.add_user_command(user_id, UserCommands::USER_AWARDS)
+
+      users     = ListUsersQueryHandler.new.list_active_organization_users(ACCESS_TOKEN)
+      users_str = users.map.with_index {|user, index| "#{index + 1}. #{user['name']}"}.join("\n")
+
+      HISTORY.add_system_message(user_id, SystemMessages::SELECT_USER, users)
+
+      bot.api.send_message(
+        chat_id: message.chat.id,
+        text:    SystemMessages::SELECT_PROJECT_MANAGER.text % {users: users_str}
+      )
     when "/#{UserCommands::LIST_PROJECTS.name}"
       HISTORY.add_user_command(user_id, UserCommands::LIST_PROJECTS)
       HISTORY.add_system_message(user_id, SystemMessages::LIST_PROJECTS)
@@ -181,7 +196,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         owner_number         = last_command_replies[SystemMessages::SELECT_PROJECT_MANAGER].message.to_i
         owner_id             = last_command_replies[SystemMessages::SELECT_PROJECT_MANAGER].extra[owner_number - 1]
 
-        project = CreateProjectHandler.new(ACCESS_TOKEN).create(
+        project = CreateProjectHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
           name:            project_name,
           organization_id: OrganizationQueryHandler.new.get_organization_id(ACCESS_TOKEN),
           flow_id:         flow_id,
@@ -215,7 +230,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
 
         HISTORY.add_system_message(user_id, SystemMessages::PROJECT_CREATED)
 
-        CreateTaskHandler.new(ACCESS_TOKEN).create(
+        CreateTaskHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
           title:      task_title,
           project_id: project['id']
         )
@@ -248,7 +263,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         
         HISTORY.add_system_message(user_id, SystemMessages::PROJECT_MEMBER_ADDED)
         
-        AddProjectMemberHandler.new(ACCESS_TOKEN).create(
+        AddProjectMemberHandler.new(ACCESS_TOKEN, ORG_CONTRACT).create(
           user_id:    user['id'],
           project_id: project['id']
         )
@@ -289,7 +304,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         task                 = last_command_replies[SystemMessages::SELECT_TASK].extra[task_number - 1]
         award                = last_command_replies[SystemMessages::ENTER_AWARD].message.to_s.to_i
 
-        SetTaskAwardHandler.new(ACCESS_TOKEN).set_award(task_id: task['id'], award: award)
+        SetTaskAwardHandler.new(ACCESS_TOKEN, ORG_CONTRACT).set_award(task_id: task['id'], award: award)
         HISTORY.add_system_message(user_id, SystemMessages::TASK_AWARD_SET, tasks)
 
         bot.api.send_message(
@@ -333,7 +348,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         user_number          = last_command_replies[SystemMessages::SELECT_USER].message.to_s.to_i
         user                 = last_command_replies[SystemMessages::SELECT_USER].extra[user_number - 1]
 
-        AssignTaskUserHandler.new(ACCESS_TOKEN).assign_user(task_id: task['id'], user_id: user['id'])
+        AssignTaskUserHandler.new(ACCESS_TOKEN, ORG_CONTRACT).assign_user(task_id: task['id'], user_id: user['id'])
         HISTORY.add_system_message(user_id, SystemMessages::USER_ASSIGNED)
 
         bot.api.send_message(
@@ -365,16 +380,17 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         task_number          = last_command_replies[SystemMessages::SELECT_TASK].message.to_i
         task                 = last_command_replies[SystemMessages::SELECT_TASK].extra[task_number - 1]
         
-        user_id = (task['info_for_stages'][0]['user_ids'] || [])[0]
+        stage = task['info_for_stages'].detect {|ifs| ifs['user_ids'].size > 0}
 
-        user = if user_id
+        user = if stage
+          user_id = stage['user_ids'].first
           users = ListUsersQueryHandler.new.list_active_organization_users(ACCESS_TOKEN)
           users.detect {|u| u['id'] == user_id}
         end
 
         points = task['points']
 
-        AcceptTaskHandler.new(ACCESS_TOKEN).accept_task(task_id: task['id'], project_id: project['id'])
+        AcceptTaskHandler.new(ACCESS_TOKEN, ORG_CONTRACT).accept_task(task_id: task['id'], project_id: project['id'])
         HISTORY.add_system_message(user_id, SystemMessages::TASK_ACCEPTED, tasks)
 
         if user && points
@@ -385,9 +401,24 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
         else
           bot.api.send_message(
             chat_id: message.chat.id,
-            text:    SystemMessages::TASK_ACCEPTED.expty_text
+            text:    SystemMessages::TASK_ACCEPTED.empty_text % {task: task['title']}
           )
         end
+      # USER AWARDS OPERATION
+      elsif user_awards_operations.can_return_awards?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+
+        last_command_replies = HISTORY.last_command_replies(user_id)
+        user_number          = last_command_replies[SystemMessages::SELECT_USER].message.to_s.to_i
+        user                 = last_command_replies[SystemMessages::SELECT_USER].extra[user_number - 1]
+
+        amount = ORG_CONTRACT.call.get_user_balance(user['id'])
+        HISTORY.add_system_message(user_id, SystemMessages::TOTAL_USER_AWARDS)
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::TOTAL_USER_AWARDS.text % {user: user['name'], amount: amount.to_s.to_i}
+        )
       else
         bot.api.send_message(
           chat_id: message.chat.id,

@@ -2,8 +2,9 @@ require 'ostruct'
 require_relative 'planiro_api'
 
 class SetTaskAwardHandler
-  def initialize(access_token)
+  def initialize(access_token, contract)
     @access_token = access_token
+    @contract     = contract
   end
   
   def set_award(task_id:, award:)
@@ -11,5 +12,7 @@ class SetTaskAwardHandler
       task_id: task_id,
       points:  award
     )
+
+    @contract.transact.set_task_award(task_id, award)
   end
 end

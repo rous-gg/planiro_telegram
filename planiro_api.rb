@@ -45,7 +45,7 @@ class PlaniroAPI
   end
 
   def update_project(id:, name:, owner_id:, flow_id:, points:, points_visible:)
-    RestClient.post(
+    puts RestClient.post(
       "#{SITE_URL}/commands.json",
       {
         access_token:    @access_token,
@@ -54,13 +54,15 @@ class PlaniroAPI
             guid: 'GUID',
             name: 'pm.projects.update_project',
             params: {
-              id:              id,
-              name:            name,
-              owner_id:        owner_id,
-              points:          points,
-              points_visible:  points_visible,
-              calendar_color:  0,
-              flow_id:         flow_id
+              project_id:         id,
+              name:               name,
+              owner_id:           owner_id,
+              points:             points,
+              points_visible:     points_visible,
+              calendar_color:     0,
+              auto_milestone:     false,
+              milestones_visible: false,
+              time_logs_visible:  false
             }
           }
         ]

@@ -100,6 +100,11 @@ module SystemMessages
   )
 
   register_message(
+    name:       :total_user_awards,
+    text:       "User %{user} awards: %{amount}"
+  )
+
+  register_message(
     name:       :unknown_input,
     text:       "Unknown input. Type command first or use /help to get list of available commands"
   )

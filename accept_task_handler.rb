@@ -2,8 +2,9 @@ require 'ostruct'
 require_relative 'planiro_api'
 
 class AcceptTaskHandler
-  def initialize(access_token)
+  def initialize(access_token, contract)
     @access_token = access_token
+    @contract     = contract
   end
   
   def accept_task(task_id:, project_id:)
@@ -28,5 +29,7 @@ class AcceptTaskHandler
       task_id:  task_id,
       stage_id: stage['id']
     )
+
+    @contract.transact.accept_task(task_id)
   end
 end
