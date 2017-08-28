@@ -125,6 +125,25 @@ class PlaniroAPI
     )
   end
 
+  def assign_user(task_id:, user_id:)
+    RestClient.post(
+      "#{SITE_URL}/commands.json",
+      {
+        access_token:    @access_token,
+        commands: [
+          '' => {
+            guid: 'GUID',
+            name: 'pm.tasks.change_main_assignees',
+            params: {
+              task_id:  task_id,
+              user_ids: [user_id]
+            }
+          }
+        ]
+      }
+    )
+  end
+
   private
   
   def get_by_path(path, params = {})
