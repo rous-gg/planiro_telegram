@@ -43,6 +43,12 @@ module SystemMessages
   )
 
   register_message(
+    name: :task_accepted,
+    text: "Task %{task} was accepted and user %{user} was awarded with %{amount}",
+    empty_text: "Task %{task} was accepted",
+  )
+
+  register_message(
     name: :enter_award,
     text: "Enter award amount (1-10):"
   )

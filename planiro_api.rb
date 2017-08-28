@@ -144,6 +144,25 @@ class PlaniroAPI
     )
   end
 
+  def change_task_stage(task_id:, stage_id:)
+    RestClient.post(
+      "#{SITE_URL}/commands.json",
+      {
+        access_token:    @access_token,
+        commands: [
+          '' => {
+            guid: 'GUID',
+            name: 'pm.tasks.change_stage',
+            params: {
+              task_id:  task_id,
+              stage_id: stage_id
+            }
+          }
+        ]
+      }
+    )
+  end
+
   private
   
   def get_by_path(path, params = {})

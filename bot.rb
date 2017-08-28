@@ -14,6 +14,7 @@ require_relative 'add_project_member_operations'
 require_relative 'task_operations'
 require_relative 'assign_user_operations'
 require_relative 'set_task_award_operations'
+require_relative 'accept_task_operations'
 require_relative 'list_project_query_handler'
 require_relative 'list_flows_query_handler'
 require_relative 'list_users_query_handler'
@@ -23,6 +24,7 @@ require_relative 'add_project_member_handler'
 require_relative 'set_task_award_handler'
 require_relative 'set_task_award_handler'
 require_relative 'create_task_handler'
+require_relative 'accept_task_handler'
 require_relative 'assign_task_user_handler'
 
 HISTORY         = History.new
@@ -34,6 +36,7 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
   task_operations               = TaskOperations.new
   set_task_award_operations     = SetTaskAwardOperations.new
   assign_user_operations        = AssignUserOperations.new
+  accept_task_operations        = AcceptTaskOperations.new
 
   bot.listen do |message|
     user_id = message.from.id
@@ -77,6 +80,18 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
       )
     when "/#{UserCommands::ASSIGN_USER.name}"
       HISTORY.add_user_command(user_id, UserCommands::ASSIGN_USER)
+      
+      projects     = ListProjectQueryHandler.new.list_projects(ACCESS_TOKEN)
+      projects_str = projects.map.with_index {|pr, index| "#{index + 1}. #{pr['name']}"}.join("\n")
+
+      HISTORY.add_system_message(user_id, SystemMessages::SELECT_PROJECT, projects)
+
+      bot.api.send_message(
+        chat_id: message.chat.id,
+        text:    SystemMessages::SELECT_PROJECT.text % {projects: projects_str}
+      )
+    when "/#{UserCommands::ACCEPT_TASK.name}"
+      HISTORY.add_user_command(user_id, UserCommands::ACCEPT_TASK)
       
       projects     = ListProjectQueryHandler.new.list_projects(ACCESS_TOKEN)
       projects_str = projects.map.with_index {|pr, index| "#{index + 1}. #{pr['name']}"}.join("\n")
@@ -325,6 +340,54 @@ Telegram::Bot::Client.run(TOKEN) do |bot|
           chat_id: message.chat.id,
           text:    SystemMessages::USER_ASSIGNED.text % {user: user['name'], task: task['title']}
         )
+      # ACCEPT TASK OPERATION
+      elsif accept_task_operations.waiting_for_select_project?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+
+        last_command_replies = HISTORY.last_command_replies(user_id)
+        project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
+        project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
+        tasks                = ListProjectTasksQueryHandler.new(ACCESS_TOKEN).list_project_tasks(project['id'])
+        tasks_str            = tasks.map.with_index {|task, index| "#{index + 1}. #{task['title']}"}.join("\n")
+
+        HISTORY.add_system_message(user_id, SystemMessages::SELECT_TASK, tasks)
+
+        bot.api.send_message(
+          chat_id: message.chat.id,
+          text:    SystemMessages::SELECT_TASK.text % {tasks: tasks_str}
+        )
+      elsif accept_task_operations.can_accept_task?(user_id)
+        HISTORY.add_user_reply(user_id, message.text)
+
+        last_command_replies = HISTORY.last_command_replies(user_id)
+        project_number       = last_command_replies[SystemMessages::SELECT_PROJECT].message.to_i
+        project              = last_command_replies[SystemMessages::SELECT_PROJECT].extra[project_number - 1]
+        task_number          = last_command_replies[SystemMessages::SELECT_TASK].message.to_i
+        task                 = last_command_replies[SystemMessages::SELECT_TASK].extra[task_number - 1]
+        
+        user_id = (task['info_for_stages'][0]['user_ids'] || [])[0]
+
+        user = if user_id
+          users = ListUsersQueryHandler.new.list_active_organization_users(ACCESS_TOKEN)
+          users.detect {|u| u['id'] == user_id}
+        end
+
+        points = task['points']
+
+        AcceptTaskHandler.new(ACCESS_TOKEN).accept_task(task_id: task['id'], project_id: project['id'])
+        HISTORY.add_system_message(user_id, SystemMessages::TASK_ACCEPTED, tasks)
+
+        if user && points
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::TASK_ACCEPTED.text % {user: user['name'], task: task['title'], amount: points}
+          )
+        else
+          bot.api.send_message(
+            chat_id: message.chat.id,
+            text:    SystemMessages::TASK_ACCEPTED.expty_text
+          )
+        end
       else
         bot.api.send_message(
           chat_id: message.chat.id,
