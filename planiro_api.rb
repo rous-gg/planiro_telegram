@@ -14,6 +14,10 @@ class PlaniroAPI
     get_by_path("/account/get_account_data.json")
   end
 
+  def get_api_token(email, password)
+    get_by_path("/account/get_api_token.json", {email: email, password: password})
+  end
+
   def get_project(project_id)
     get_by_path("/pm/projects/get_project.json", {id: project_id})
   end
@@ -172,7 +176,13 @@ class PlaniroAPI
   private
   
   def get_by_path(path, params = {})
-    data = RestClient.get("#{SITE_URL}#{path}", params: params.merge(access_token: @access_token))
+    attrs = params
+
+    if @access_token
+      attrs = attrs.merge(access_token: @access_token)
+    end
+    
+    data = RestClient.get("#{SITE_URL}#{path}", params: attrs)
     Oj.load(data)
   rescue => e
     puts e.inspect

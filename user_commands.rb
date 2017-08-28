@@ -12,6 +12,11 @@ module UserCommands
   end
 
   register_command(
+    name: :join,
+    text: "Allows user to start interacting with bot. Access token will be asked. Can be received from "
+  )
+
+  register_command(
     name: :help,
     text: "Returns information about all available commands"
   )

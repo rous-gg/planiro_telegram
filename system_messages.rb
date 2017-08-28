@@ -23,6 +23,31 @@ module SystemMessages
   )
 
   register_message(
+    name: :join_required,
+    text: "Please run /join command first"
+  )
+
+  register_message(
+    name: :join_successfull,
+    text: "You have successfully joined room. Use /help command to start working."
+  )
+
+  register_message(
+    name: :enter_email,
+    text: "Enter Planiro email:"
+  )
+
+  register_message(
+    name: :invalid_email_or_password,
+    text: "Invalid email or password"
+  )
+
+  register_message(
+    name: :enter_password,
+    text: "Enter Planiro password:"
+  )
+
+  register_message(
     name: :type_task_title,
     text: "Type task title:"
   )
